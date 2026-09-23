@@ -1,0 +1,68 @@
+Objective
+- « Aura Vibe » : app Expo/React Native de lecteur de musique 100 % offline (thème M3 violet, glass tab bar), basée sur des données réelles (pas de données d'exemple), copyright « © 2026 Finiavana J Andrianirina ».
+- Dernière directive utilisateur (évolutions en cours) : égaliseur avec presets (Flat, Rock, Pop, Classical, Jazz, Bass Boost, Vocal, Electronic) + bass boost, virtualizer, balance L/R, loudness/ReplayGain, crossfade, gapless, fade in/out ; scan de dossier/tous les sons ; contrôle volume ; seek (existe) ; bibliothèque par artiste/album/dossier/genre/favori/récemment joué ; tri (nom, titre, durée, date…) ; playlists ; pochette d'album + animation de pochette ; visualiseur audio ; infos morceau ; bouton « ajouter à la file » ; mode light/dark ; paramètres ; améliorations UX/UI ; multi-formats (mp3, wav, flac, aac, ogg, m4a, opus, aiff).
+Important Details
+- Projet : C:\Users\USER\Desktop\Projects\aura\aura-vibe — Expo SDK ~57.0.24, React 19.2.3, RN 0.86.3, TS strict, typed routes + reactCompiler.
+- Lint React Compiler strict : react-hooks/refs (pas de ref.current en render → utiliser useState(() => new Animated.Value(...))), react-hooks/set-state-in-effect (setState synchrone interdit dans un effet, callbacks différés OK via setTimeout/async).
+- SDK 57 : Tabs = expo-router/js-tabs (prop sceneStyle), expo-audio en imports nommés (pas de namespace Audio), StyleSheet.absoluteFillObject absent des types.
+- API MediaLibrary (Next) : new Query().eq(AssetField.MEDIA_TYPE, MediaType.AUDIO).orderBy(AssetField.CREATION_TIME).offset(n).limit(PAGE).exe() → Asset[] ; AssetField = creationTime, modificationTime, mediaType, width, height, duration, isFavorite ; MediaType = unknown/image/audio/video ; permission granulaire : requestPermissionsAsync(false, ['audio']), GranularPermission = 'audio' | 'photo' | 'video'. Pas d'artist/album exposé. Subpath expo-media-library/legacy existe (getAssetsAsync, URI file:// avec vrai chemin sur Android → permettra dossier→genre).
+- Décision thème light/dark : palette vivante via proxy getters (theme.ts createLiveColors()) + hook useAppStyles(factory) (theme-context) qui recalcule les StyleSheet.create par composant au changement de mode. StyleSheet.create statique au niveau module ne relit PAS colors → tous les fichiers consommant les styles doivent passer en factory. Les shadows restent statiques (accepté).
+- Limites réelles (assumées) : EQ fréquentiel réel, crossfade, gapless, virtualizer, balance ne sont PAS possibles avec expo-audio (pas d'API EQ/pan ; metering est réservé à l'enregistrement ; AudioPlayerOptions n'a que updateInterval/preferredForwardBufferDuration — déjà ajouté preferredForwardBufferDuration: 2). Appliqué physiquement : volume (player.volume), loudness, bass boost (gain master), fade in/out (rampes de volume). Le reste = UI/paramètres persistés, formulé honnêtement dans l'UI.
+- EAS : projet lié @finiavana/aura-vibe, package com.auravibe.app, le plugin natif expo-media-library ajouté exige un nouveau build APK pour tester le scan.
+- _layout.tsx racine référence encore <Stack.Screen name="genre/[slug]" /> alors que la route est supprimée → à retirer impérativement.
+- mini-player.tsx : dernier edit a ajouté useTheme à l'import sans l'utiliser → unused import, lint cassé tant que le tint BlurView n'est pas branché ou l'import retiré.
+- Utilitaire de durée = formatTime(totalSeconds?) (durationText n'existe pas) ; util dispo : trackInitials, hashHue, parseTrackName (gère numéros de piste et suffixe « (2) »), genId, derivedAlbum, sanitizeFileName, hslToHex, clamp01, formatBytes.
+- KEYS storage : aura:library:v1, aura:queue:v1, aura:playerPrefs:v1, aura:recentSearches:v1, aura:recentTracks:v1, aura:lastPlayed:v1, aura:settings:v1 (nouveau), aura:theme:v1 (nouveau).
+- Todo list (todowrite) de 12 items en cours : 1) theme+theme-context+useAppStyles (en cours) ; 2) settings-context persist ; 3) player-context volume/addToQueue/fade ; 4) scan Android legacy dossier→genre ; 5) route /settings ; 6) library tri+Genres ; 7) TrackMenu addToQueue/infos/couleur ; 8) player artwork rotatif+visualiseur+slider volume ; 9) playlist renommer ; 10) home gear + root layout providers + retrait genre ; 11) refactor useAppStyles tous écrans/composants ; 12) validations lint+tsc+export web.
+Work State
+Completed
+- Phase précédente : tsc 0 erreur, expo lint 0, expo-doctor 21/21, export web OK ; hydratation PlayerProvider (attend library.loading), hygiène de file ; MiniPlayer ; TrackMenu branché partout ; import fichier robuste (dédupe artiste—titre—size, concurrence 3, bâché) ; playlists ; APK EAS construit (build 3f3e3799-…, artefact téléchargé aura-vibe-1.0.0.apk).
+- app.json : plugin expo-media-library ajouté (grantPermissions: false, granularPermissions: ["audio"], audioPermission FR).
+- src\lib\device-audio.ts créé : ScannedAudio, ScanResult, requestDeviceAudioPermission(), scanDeviceAudio(onProgress?) (Query Next, PAGE=150, getFilename/getDuration/getUri/getCreationTime), persistScannedAudio() (copie dans Paths.document/music, suffixe unique, fallback content://), isMeaningfulAudio (≥5 s), MIN_SIZE_FALLBACK.
+- src\lib\discover.ts réécrit sans données exemple : quickPlays(tracks) (Écoutes récentes / Coups de cœur / Le plus écouté / Ajouts récents), artistSummary, albumSummary, recentlyPlayed, searchTracks.
+- src\app\genre\[slug].tsx supprimé (dossier src\app\genre vide restant).
+- src\context\library-context.tsx : scanStatus state, importFromDevice(): Promise<DeviceImportResult> (permission → dédupe ${title}__${artist} normalisé → chunks de 40 avec setState par batch → durée via readAudioDuration seulement si file: → tracks).
+- src\components\motion.tsx : FadeUp + PressableScale (Animated via useState initializer, « pressIn/Out » avec GestureResponderEvent).
+- src\components\copyright.tsx : © 2026 Finiavana J Andrianirina.
+- src\app\(tabs)\explore.tsx réécrit : recherche dans la bibliothèque (chips récents persistés, grille artistes, liste albums avec formatTime, EmptyState, copyright, FadeUp).
+- src\app\(tabs)\index.tsx : sections enveloppées de FadeUp + footer Copyright.
+- src\context\player-context.tsx : preferredForwardBufferDuration: 2 dans createAudioPlayer(null, { updateInterval: 200, … }).
+- src\app\(tabs)\library.tsx : openImportOptions (Alert scan vs fichiers), scanning, ligne de statut scanStatus (ActivityIndicator), styles scanRow/scanText, CTA vides → openImportOptions.
+- src\constants\theme.ts réécrit : ThemeMode, ThemePalette, palettes dark/light, setThemePalette, getThemeMode, createLiveColors (getters vivants), colors exporté, fonts/typography/spacing/radius/shadows conservés.
+- src\context\theme-context.tsx créé : ThemeProvider, useTheme, restoreTheme (exporté mais pas encore branché), useAppStyles<T>(factory) (useMemo keyé mode, eslint-disable exhaustive-deps).
+- src\lib\storage.ts : ajout KEYS.settings et KEYS.theme.
+- Refactor styles → useAppStyles(createStyles) terminé pour : artwork, empty-state, primary-button, section-header, seekbar, track-row, copyright, mini-player (styles) ; tab-bar (styles + tint BlurView selon mode + border colors.stroke + iconWrapActive: colors.strokeActive).
+- Lint + tsc verts après corrections (motion, explore formatTime, library-context variable found retirée).
+Active
+- Refactor styles restant : track-menu.tsx, (tabs)/index.tsx, (tabs)/explore.tsx, (tabs)/library.tsx, player.tsx, playlist/[id].tsx ; _layout.tsx racine (retirer genre route, provider, StatusBar par mode, restore thème) ; (tabs)/_layout.tsx (consommer useTheme pour sceneStyle).
+- mini-player.tsx : import useTheme inutilisé (brancher sur tint BlurView ou retirer).
+- ThemeProvider ne restaure pas encore le thème persisté au lancement (restoreTheme exporté mais non câblé).
+- settings-context pas encore créé ; route /settings pas créée ; player-context volume/addToQueue/fade pas faits ; scan Android legacy (chemins→dossier→genre) pas fait ; tri + filtre Genres pas faits ; TrackMenu (addToQueue/infos/couleur pochette) pas fait ; player screen (artwork rotatif, visualiseur, slider volume) pas fait ; rename playlist pas fait ; gear Paramètres sur l'accueil pas fait.
+Blocked
+- (aucun) — limites DSP (EQ/crossfade/gapless/balance) documentées ci-dessus, gérées en préférences/UI.
+Next Move
+1. Finir le câblage thème : retirer <Stack.Screen name="genre/[slug]" /> du _layout.tsx racine, envelopper avec ThemeProvider (restore thème + StatusBar style par mode), faire consommer useTheme par (tabs)/_layout.tsx ; corriger l'import inutilisé de mini-player.tsx.
+2. Convertir les styles restants en useAppStyles(createStyles) : track-menu, index, explore, library, player, playlist/[id].
+3. Créer settings-context (volume, eqPreset avec les 8 presets + customBands, bassBoost, virtualizer, balance, loudness, crossfade, fadeInOut, gapless, theme ; persist KEYS.settings) puis la route /settings (sections Lecture / Égaliseur / Apparence).
+4. Player-context : appliquer volume/loudness/bass gain, addToQueue(ids), rampes fade in/out.
+5. device-audio.ts : scan Android via expo-media-library/legacy (chemins réels → dossier comme genre), garder l'API Next pour iOS/web.
+6. Bibliothèque : tri (titre/artiste/album/durée/date) + filtre Genres ; TrackMenu : ajouter à la file, informations morceau, couleur pochette ; player screen : artwork rotatif, visualiseur (pseudo-barres Animated), slider volume ; renommer playlist (modal).
+7. Valider : npx expo lint, npx tsc --noEmit, export web, puis build EAS APK (tester plugin media-library + scan).
+Relevant Files
+- src\constants\theme.ts — palettes dark/light + colors vivant (refactoré).
+- src\context\theme-context.tsx — ThemeProvider/useTheme/useAppStyles/restoreTheme (nouveau).
+- src\context\settings-context.tsx — À CRÉER.
+- src\context\player-context.tsx — volume/addToQueue/fade à ajouter ; preferredForwardBufferDuration: 2 fait.
+- src\context\library-context.tsx — scanStatus + importFromDevice ajoutés.
+- src\lib\device-audio.ts — module scan ; à étendre (legacy Android, dossier→genre).
+- src\lib\discover.ts — collections data-driven (sans données exemple).
+- src\lib\storage.ts — KEYS.settings/theme ajoutés.
+- src\app\_layout.tsx — retirer route genre + providers thème (en attente).
+- src\app\(tabs)\_layout.tsx — sceneStyle à thémer (en attente).
+- src\app\(tabs)\index.tsx, explore.tsx, library.tsx — réécrits ; refactor styles restant.
+- src\app\player.tsx, src\app\playlist\[id].tsx — améliorations prévues (slider volume, artwork rotatif, visualiseur, rename).
+- src\components\motion.tsx, copyright.tsx — nouveaux.
+- src\components\track-menu.tsx — à étendre (addToQueue/infos/couleur pochette) + refactor styles.
+- src\components\mini-player.tsx — import useTheme inutilisé à corriger.
+- src\components\equalizer.tsx — barres animées existantes (base du visualiseur).
+- app.json — plugin expo-media-library ajouté.
