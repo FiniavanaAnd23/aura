@@ -2,25 +2,20 @@ import * as MediaLibrary from 'expo-media-library';
 import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
-export type ScannedAudio = {
-  filename: string;
-  uri: string;
-  durationSec?: number;
-  createdAt?: number;
-};
+import {
+  isMeaningfulAudio,
+  MIN_SIZE_FALLBACK,
+  PAGE,
+  type ScanResult,
+  type ScannedAudio,
+} from '@/lib/device-audio.shared';
 
-export type ScanResult = {
-  found: number;
-  added: number;
-  skipped: number;
-};
-
-const PAGE = 150;
-const MIN_SIZE_FALLBACK = 10 * 1024;
+export type { ScanResult, ScannedAudio };
+export { isMeaningfulAudio, MIN_SIZE_FALLBACK, PAGE };
 
 export async function requestDeviceAudioPermission(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
-  const granular = Platform.OS === 'android' ? ['audio'] as MediaLibrary.GranularPermission[] : undefined;
+  const granular = Platform.OS === 'android' ? (['audio'] as MediaLibrary.GranularPermission[]) : undefined;
   const perm = await MediaLibrary.requestPermissionsAsync(false, granular);
   return perm.granted;
 }
@@ -87,10 +82,3 @@ export async function persistScannedAudio(item: ScannedAudio): Promise<string> {
     return item.uri;
   }
 }
-
-export function isMeaningfulAudio(item: ScannedAudio): boolean {
-  if (item.durationSec == null) return true;
-  return item.durationSec >= 5;
-}
-
-export { MIN_SIZE_FALLBACK };

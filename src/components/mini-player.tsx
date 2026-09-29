@@ -8,7 +8,7 @@ import { Artwork } from '@/components/artwork';
 import { colors, fonts, radius, spacing, typography } from '@/constants/theme';
 import { usePlayer } from '@/context/player-context';
 import { useAppStyles, useTheme } from '@/context/theme-context';
-import { trackInitials } from '@/lib/utils';
+import { artworkInitials } from '@/lib/utils';
 
 type Props = {
   bottom?: number;
@@ -29,7 +29,7 @@ export function MiniPlayer({ bottom = 0, style }: Props) {
     <View style={[styles.wrap, { bottom }, style]}>
       <BlurView intensity={mode === 'light' ? 80 : 48} tint={mode === 'light' ? 'light' : 'dark'} style={styles.blur}>
         <Pressable style={styles.pressable} onPress={() => router.push('/player')}>
-          <Artwork hue={currentTrack.hue} initials={trackInitials(currentTrack.artist)} size={42} radiusValue={radius.sm} iconSize={16} />
+          <Artwork hue={currentTrack.hue} initials={artworkInitials(currentTrack)} size={42} radiusValue={radius.sm} iconSize={16} />
           <View style={styles.meta}>
             <Text numberOfLines={1} style={[typography.bodyMd, styles.title]}>
               {currentTrack.title}

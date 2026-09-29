@@ -5,15 +5,17 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Artwork } from '@/components/artwork';
 import { SeekBar } from '@/components/seekbar';
+import { Slider } from '@/components/slider';
 import { TrackMenu } from '@/components/track-menu';
 import { TrackRow } from '@/components/track-row';
-import { colors, fonts, radius, spacing, typography } from '@/constants/theme';
+import { RingVisualizer, VinylArtwork } from '@/components/vinyl';
+import { colors, fonts, spacing, typography } from '@/constants/theme';
 import { useLibrary } from '@/context/library-context';
 import { usePlayer } from '@/context/player-context';
+import { useSettings } from '@/context/settings-context';
 import { useAppStyles } from '@/context/theme-context';
-import { formatTime, hslToHex, trackInitials } from '@/lib/utils';
+import { artworkInitials, formatTime, hslToHex } from '@/lib/utils';
 import type { RepeatMode, Track } from '@/lib/types';
 
 const REPEAT_ICON: Record<RepeatMode, React.ComponentProps<typeof MaterialIcons>['name']> = {
@@ -21,6 +23,21 @@ const REPEAT_ICON: Record<RepeatMode, React.ComponentProps<typeof MaterialIcons>
   all: 'repeat',
   one: 'repeat-one',
 };
+
+/** Dernier volume non nul, pour pouvoir rétablir le son après un mute. */
+let lastAudibleVolume = 0.85;
+
+function toggleMute(volume: number) {
+  if (volume > 0) lastAudibleVolume = volume;
+  return volume > 0 ? 0 : lastAudibleVolume;
+}
+
+function volumeIconName(volume: number): React.ComponentProps<typeof MaterialIcons>['name'] {
+  if (volume <= 0) return 'volume-off';
+  if (volume < 0.34) return 'volume-down';
+  if (volume < 0.7) return 'volume-up';
+  return 'volume-up';
+}
 
 function repeatLabel(mode: RepeatMode) {
   if (mode === 'one') return 'Répéter la piste';
@@ -34,6 +51,7 @@ export default function PlayerScreen() {
   const router = useRouter();
   const library = useLibrary();
   const player = usePlayer();
+  const settings = useSettings();
   const [menuTrack, setMenuTrack] = useState<Track | null>(null);
 
   const track = player.currentTrack;
@@ -68,7 +86,10 @@ export default function PlayerScreen() {
     player.playQueue(reordered, tid);
   };
 
-  const initials = trackInitials(track.artist);
+  const initials = artworkInitials(track);
+
+  const muted = settings.volume <= 0;
+  const volumeIcon = volumeIconName(settings.volume);
 
   return (
     <LinearGradient
@@ -100,7 +121,8 @@ export default function PlayerScreen() {
         showsVerticalScrollIndicator={false}>
         {/* Piste */}
         <View style={styles.artWrap}>
-          <Artwork hue={track.hue} initials={initials} size={300} radiusValue={radius.xl} iconSize={86} />
+          <RingVisualizer playing={player.isPlaying} size={280} color={hslToHex(track.hue, 80, 62)} />
+          <VinylArtwork playing={player.isPlaying} hue={track.hue} initials={initials} size={280} />
           <Pressable style={styles.favBtn} onPress={() => library.toggleFavorite(track.id)} hitSlop={6}>
             <MaterialIcons
               name="favorite"
@@ -163,6 +185,34 @@ export default function PlayerScreen() {
         <Text style={[typography.labelSm, styles.repeatHint, { textTransform: 'uppercase' }]}>
           {repeatLabel(player.repeat)}
         </Text>
+
+        {/* Volume */}
+        <View style={styles.volumeRow}>
+          <Pressable
+            style={styles.volumeBtn}
+            hitSlop={8}
+            onPress={() => settings.update({ volume: toggleMute(settings.volume) })}
+            accessibilityLabel={muted ? 'Réactiver le son' : 'Couper le son'}>
+            <MaterialIcons
+              name={volumeIcon}
+              size={20}
+              color={muted ? colors.outline : colors.onSurfaceVariant}
+            />
+          </Pressable>
+          <View style={styles.volumeSlider}>
+            <Slider
+              value={settings.volume}
+              onValueChange={(v) => settings.update({ volume: v })}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.stroke}
+              thumbTintColor={colors.onSurface}
+              minimumValue={0}
+              maximumValue={1}
+              step={0.01}
+            />
+          </View>
+          <Text style={styles.volumeValue}>{Math.round(settings.volume * 100)}</Text>
+        </View>
 
         {/* File d'attente */}
         {nextUp.length ? (
@@ -314,6 +364,29 @@ const createStyles = () => StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.sm,
     letterSpacing: 1,
+  },
+  volumeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  volumeBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  volumeSlider: {
+    flex: 1,
+  },
+  volumeValue: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
+    minWidth: 26,
+    textAlign: 'right',
   },
   queue: {
     marginTop: spacing.xl,

@@ -6,7 +6,7 @@ import { Artwork } from '@/components/artwork';
 import { Equalizer } from '@/components/equalizer';
 import { colors, fonts, radius, spacing, typography } from '@/constants/theme';
 import { useAppStyles } from '@/context/theme-context';
-import { formatTime, trackInitials } from '@/lib/utils';
+import { artworkInitials, formatTime } from '@/lib/utils';
 import type { Track } from '@/lib/types';
 
 type Props = {
@@ -33,7 +33,7 @@ export function TrackRow({
   showToolbar = true,
 }: Props) {
   const styles = useAppStyles(createStyles);
-  const initials = trackInitials(track.artist);
+  const initials = artworkInitials(track);
 
   return (
     <Pressable

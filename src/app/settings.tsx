@@ -1,4 +1,4 @@
-import Slider from '@react-native-community/slider';
+import { Slider } from '@/components/slider';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import React from 'react';
@@ -9,10 +9,8 @@ import { Copyright } from '@/components/copyright';
 import { PressableScale } from '@/components/motion';
 import { SectionHeader } from '@/components/section-header';
 import { colors, fonts, radius, spacing, typography } from '@/constants/theme';
-import { useSettings } from '@/context/settings-context';
-import { useAppStyles } from '@/context/theme-context';
-import { useTheme } from '@/context/theme-context';
-import { BAND_NAMES, EQ_PRESETS } from '@/context/settings-context';
+import { BAND_NAMES, EQ_PRESETS, useSettings } from '@/context/settings-context';
+import { useAppStyles, useTheme } from '@/context/theme-context';
 
 function SwitchRow({ label, hint, value, onValueChange }: { label: string; hint?: string; value: boolean; onValueChange: (v: boolean) => void }) {
   const styles = useAppStyles(createStyles);
@@ -223,7 +221,6 @@ export default function SettingsScreen() {
   );
 }
 
-const cardCellGap = spacing.md;
 const createStyles = () =>
   StyleSheet.create({
     root: {
@@ -239,8 +236,10 @@ const createStyles = () =>
     },
     headerTitle: {
       color: colors.onSurface,
-      fontSize: typography.subtitle,
-      fontFamily: fonts.headingBold,
+      fontSize: typography.headlineLg.fontSize,
+      lineHeight: typography.headlineLg.lineHeight,
+      letterSpacing: typography.headlineLg.letterSpacing,
+      fontFamily: fonts.headline,
     },
     backBtn: {
       width: 38,
@@ -361,5 +360,3 @@ function compact(hex: string, alpha: number): string {
   const b = parseInt(h.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${alpha})`;
 }
-
-void cardCellGap;

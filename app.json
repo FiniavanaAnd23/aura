@@ -64,10 +64,13 @@
         "expo-media-library",
         {
           "grantPermissions": false,
-          "granularPermissions": ["audio"],
+          "granularPermissions": [
+            "audio"
+          ],
           "audioPermission": "Aura Vibe accède à vos fichiers audio pour les rendre disponibles hors ligne."
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

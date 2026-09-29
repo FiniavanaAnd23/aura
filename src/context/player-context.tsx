@@ -65,6 +65,22 @@ function getPlayer() {
   return persistentPlayer;
 }
 
+/**
+ * Écrit le volume maître sur le lecteur singleton.
+ * Passe par le module (et non la closure du composant) car l'instance
+ * AudioPlayer est un objet mutable : l'affecter depuis un rendu React
+ * viole la règle react-hooks/immutability du compilateur.
+ */
+function setPlayerVolume(value: number) {
+  try {
+    if (persistentPlayer) {
+      persistentPlayer.volume = clamp01(value);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 if (Platform.OS === 'android') {
   requestNotificationPermissionsAsync().catch(() => {});
 }
@@ -82,28 +98,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     (from: number, to: number, ms: number) => {
       if (volumeRampRef.current) clearInterval(volumeRampRef.current);
       volumeRampRef.current = null;
-      try {
-        player.volume = clamp01(from);
-      } catch {
-        // ignore
-      }
+      setPlayerVolume(from);
       const steps = Math.max(1, Math.round(ms / 30));
       let i = 0;
       volumeRampRef.current = setInterval(() => {
         i += 1;
         const t = i / steps;
-        try {
-          player.volume = clamp01(from + (to - from) * t);
-        } catch {
-          // ignore
-        }
+        setPlayerVolume(from + (to - from) * t);
         if (i >= steps && volumeRampRef.current) {
           clearInterval(volumeRampRef.current);
           volumeRampRef.current = null;
         }
       }, 30);
     },
-    [player]
+    []
   );
 
   const applyMasterGain = useCallback(
@@ -249,11 +257,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
       if (autoplay) {
         if (settings.fadeInOut) {
-          try {
-            player.volume = 0;
-          } catch {
-            // ignore
-          }
+          setPlayerVolume(0);
           player.play();
           library.incrementPlay(track.id);
           rampVolume(0, computedTarget, 500);
@@ -369,10 +373,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         setTimeout(() => {
           try {
             player.pause();
-            player.volume = computedTarget;
           } catch {
             // ignore
           }
+          setPlayerVolume(computedTarget);
         }, 220);
       } else {
         player.pause();

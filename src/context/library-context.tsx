@@ -133,8 +133,10 @@ type LibraryContextValue = {
   toggleFavorite: (id: string) => void;
   incrementPlay: (id: string) => void;
   removeTrack: (id: string) => Promise<void>;
+  updateTrack: (id: string, patch: Partial<Pick<Track, 'title' | 'artist' | 'album' | 'genre'>>) => void;
   createPlaylist: (name: string, description?: string) => string;
   deletePlaylist: (id: string) => void;
+  renamePlaylist: (id: string, name: string, description?: string) => void;
   addToPlaylist: (playlistId: string, trackIds: string[]) => void;
   removeFromPlaylist: (playlistId: string, trackId: string) => void;
   updateDuration: (id: string, duration: number) => void;
@@ -195,7 +197,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       try {
         const name = asset.name ?? 'audio';
         const uri = await persistPickedAudio(asset);
-        const { artist, title } = parseTrackName(name);
+        const { artist, title, album } = parseTrackName(name);
         const key = `${artist} — ${title} — ${asset.size ?? ''}`;
         if (existing.has(key)) return;
         existing.add(key);
@@ -205,7 +207,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
           id: genId('trk'),
           title,
           artist,
-          album: derivedAlbum({ artist }),
+          album: album ?? derivedAlbum({ artist }),
           duration,
           uri,
           size: asset.size,
@@ -262,7 +264,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
         try {
           const uri = await persistScannedAudio(item);
           if (!uri) continue;
-          const { artist, title } = parseTrackName(item.filename);
+          const { artist, title, album } = parseTrackName(item.filename);
           const key = `${title}__${artist}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
           if (existing.has(key)) continue;
           existing.add(key);
@@ -276,7 +278,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
             id: genId('trk'),
             title,
             artist,
-            album: derivedAlbum({ artist }),
+            album: album ?? derivedAlbum({ artist }),
             duration,
             uri,
             size,
@@ -339,6 +341,24 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.tracks]);
 
+  const updateTrack = useCallback((id: string, patch: Partial<Pick<Track, 'title' | 'artist' | 'album' | 'genre'>>) => {
+    setState((prev) => ({
+      ...prev,
+      tracks: prev.tracks.map((t) => {
+        if (t.id !== id) return t;
+        const next = { ...t };
+        if (patch.title !== undefined) next.title = patch.title.trim() || t.title;
+        if (patch.artist !== undefined) next.artist = patch.artist.trim() || t.artist;
+        if (patch.album !== undefined) next.album = patch.album.trim() || t.album;
+        if (patch.genre !== undefined) {
+          const g = patch.genre.trim();
+          next.genre = g || undefined;
+        }
+        return next;
+      }),
+    }));
+  }, []);
+
   const createPlaylist = useCallback((name: string, description?: string) => {
     const id = genId('pl');
     setState((prev) => ({
@@ -353,6 +373,16 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
 
   const deletePlaylist = useCallback((id: string) => {
     setState((prev) => ({ ...prev, playlists: prev.playlists.filter((p) => p.id !== id) }));
+  }, []);
+
+  const renamePlaylist = useCallback((id: string, name: string, description?: string) => {    const clean = name.trim();
+    if (!clean) return;
+    setState((prev) => ({
+      ...prev,
+      playlists: prev.playlists.map((p) =>
+        p.id === id ? { ...p, name: clean, ...(description === undefined ? {} : { description }), updatedAt: Date.now() } : p
+      ),
+    }));
   }, []);
 
   const addToPlaylist = useCallback((playlistId: string, trackIds: string[]) => {
@@ -403,8 +433,10 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       toggleFavorite,
       incrementPlay,
       removeTrack,
+      updateTrack,
       createPlaylist,
       deletePlaylist,
+      renamePlaylist,
       addToPlaylist,
       removeFromPlaylist,
       updateDuration,
@@ -421,8 +453,10 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
     toggleFavorite,
     incrementPlay,
     removeTrack,
+    updateTrack,
     createPlaylist,
     deletePlaylist,
+    renamePlaylist,
     addToPlaylist,
     removeFromPlaylist,
     updateDuration,

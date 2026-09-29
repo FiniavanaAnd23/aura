@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Artwork } from '@/components/artwork';
@@ -12,7 +12,7 @@ import { colors, fonts, radius, spacing, typography } from '@/constants/theme';
 import { useLibrary } from '@/context/library-context';
 import { usePlayer } from '@/context/player-context';
 import { useAppStyles } from '@/context/theme-context';
-import { hashHue, titleCount, trackInitials } from '@/lib/utils';
+import { artworkInitials, hashHue, titleCount, trackInitials } from '@/lib/utils';
 import type { Track } from '@/lib/types';
 
 export default function PlaylistScreen() {
@@ -23,6 +23,9 @@ export default function PlaylistScreen() {
   const library = useLibrary();
   const player = usePlayer();
   const [adding, setAdding] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [draftDesc, setDraftDesc] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menuTrack, setMenuTrack] = useState<Track | null>(null);
 
@@ -71,6 +74,22 @@ export default function PlaylistScreen() {
     setAdding(false);
   };
 
+  const openRename = () => {
+    setDraftName(playlist.name);
+    setDraftDesc(playlist.description ?? '');
+    setRenaming(true);
+  };
+
+  const confirmRename = () => {
+    const name = draftName.trim();
+    if (!name) {
+      Alert.alert('Nom requis', 'La playlist doit avoir un nom.');
+      return;
+    }
+    library.renamePlaylist(playlist.id, name, draftDesc.trim());
+    setRenaming(false);
+  };
+
   const confirmDelete = () => {
     Alert.alert('Supprimer cette playlist ?', `« ${playlist.name} » sera définitivement supprimée.`, [
       { text: 'Annuler', style: 'cancel' },
@@ -86,14 +105,25 @@ export default function PlaylistScreen() {
           <Pressable style={styles.backBtn} onPress={() => router.back()} hitSlop={10}>
             <MaterialIcons name="arrow-back" size={22} color={colors.onSurface} />
           </Pressable>
-          <Pressable style={styles.backBtn} onPress={confirmDelete} hitSlop={10}>
-            <MaterialIcons name="delete-outline" size={20} color={colors.onSurfaceVariant} />
-          </Pressable>
+          <View style={styles.backActions}>
+            <Pressable style={styles.backBtn} onPress={openRename} hitSlop={10} accessibilityLabel="Renommer la playlist">
+              <MaterialIcons name="edit" size={19} color={colors.onSurfaceVariant} />
+            </Pressable>
+            <Pressable style={styles.backBtn} onPress={confirmDelete} hitSlop={10} accessibilityLabel="Supprimer la playlist">
+              <MaterialIcons name="delete-outline" size={20} color={colors.onSurfaceVariant} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.hero}>
           <Artwork hue={hashHue(playlist.name)} initials={trackInitials(playlist.name)} size={132} radiusValue={radius.lg} iconSize={40} />
-          <Text style={[typography.headlineLgMobile, styles.heroTitle]}>{playlist.name}</Text>
+          <Text
+            style={[typography.headlineLgMobile, styles.heroTitle]}
+            onPress={openRename}
+            onLongPress={openRename}
+            suppressHighlighting>
+            {playlist.name}
+          </Text>
           {playlist.description ? <Text style={styles.heroDesc}>{playlist.description}</Text> : null}
           <View style={styles.heroMeta}>
             <MaterialIcons name="offline-pin" size={14} color={colors.secondary} />
@@ -172,7 +202,7 @@ export default function PlaylistScreen() {
               style={styles.sheetList}
               renderItem={({ item }) => (
                 <Pressable style={styles.pickRow} onPress={() => toggleSelect(item.id)}>
-                  <Artwork hue={item.hue} initials={trackInitials(item.artist)} size={40} radiusValue={radius.sm} iconSize={16} />
+                  <Artwork hue={item.hue} initials={artworkInitials(item)} size={40} radiusValue={radius.sm} iconSize={16} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text numberOfLines={1} style={[typography.bodyMd, { color: colors.onSurface }]}>
                       {item.title}
@@ -197,6 +227,56 @@ export default function PlaylistScreen() {
                 onPress={confirmAdd}
                 disabled={!selected.size}
               />
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={renaming} transparent animationType="slide" onRequestClose={() => setRenaming(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetEyebrow}>Modifier</Text>
+                <Text style={[typography.headlineSm, { color: colors.onSurface, fontFamily: fonts.headlineSemi }]}>
+                  Renommer la playlist
+                </Text>
+              </View>
+              <Pressable style={styles.sheetClose} onPress={() => setRenaming(false)} hitSlop={8}>
+                <MaterialIcons name="close" size={20} color={colors.onSurface} />
+              </Pressable>
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Nom</Text>
+              <TextInput
+                style={styles.input}
+                value={draftName}
+                onChangeText={setDraftName}
+                placeholder="Nom de la playlist"
+                placeholderTextColor={colors.outline}
+                selectionColor={colors.primary}
+                maxLength={60}
+                autoFocus
+                returnKeyType="next"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Description (facultatif)</Text>
+              <TextInput
+                style={[styles.input, styles.inputMultiline]}
+                value={draftDesc}
+                onChangeText={setDraftDesc}
+                placeholder="Ambiance, moment, style..."
+                placeholderTextColor={colors.outline}
+                selectionColor={colors.primary}
+                maxLength={140}
+                multiline
+              />
+            </View>
+
+            <View style={styles.sheetActions}>
+              <PrimaryButton label="Enregistrer" icon="check" onPress={confirmRename} disabled={!draftName.trim()} />
             </View>
           </View>
         </View>
@@ -226,6 +306,37 @@ const createStyles = () => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(20,22,30,0.7)',
+  },
+  backActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  field: {
+    gap: 6,
+    marginBottom: spacing.md,
+  },
+  fieldLabel: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    fontFamily: fonts.bodySemi,
+  },
+  input: {
+    backgroundColor: colors.surfaceHigh,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    color: colors.onSurface,
+    fontFamily: fonts.body,
+    fontSize: 14,
+  },
+  inputMultiline: {
+    minHeight: 76,
+    textAlignVertical: 'top',
   },
   hero: {
     alignItems: 'center',

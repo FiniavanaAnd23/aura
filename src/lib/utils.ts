@@ -48,16 +48,41 @@ export function trackInitials(name: string) {
     .join('') || '♪';
 }
 
-export function parseTrackName(fileName: string): { title: string; artist: string } {
+/**
+ * Initiales affichées sur la pochette d'un morceau.
+ * Le titre prime sur l'artiste : beaucoup de fichiers importés n'ont pas de
+ * tag d'artiste (« Artiste inconnu »), ce qui affichait « AI » sur les pochettes.
+ */
+export function artworkInitials(track: { title?: string; artist?: string; album?: string }) {
+  const source = track.title?.trim() || track.artist?.trim() || track.album?.trim() || '';
+  return trackInitials(source);
+}
+
+export type ParsedTrackName = { title: string; artist: string; album?: string };
+
+/**
+ * Décompose un nom de fichier en artiste / album / titre.
+ * Gère les conventions courantes des collections hors-ligne :
+ * `01 - Artiste - Titre.mp3`, `Artiste - Album - 01 Titre.mp3`, `Artiste _ Titre.mp3`.
+ */
+export function parseTrackName(fileName: string): ParsedTrackName {
   let basename = fileName.replace(/\.[^.]+$/, '').trim();
   basename = basename.replace(/\s*\(\d+\)\s*$/, '').trim();
   basename = basename.replace(/^\d{1,3}[\s._-]+/, '').trim();
   const separators = [' - ', ' – ', ' — ', '_', '-'];
   for (const sep of separators) {
-    const idx = basename.indexOf(sep);
-    if (idx > 0 && idx < basename.length - sep.length) {
-      const artist = basename.slice(0, idx).trim();
-      const title = basename.slice(idx + sep.length).trim();
+    const parts = basename.split(sep).map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      // On saute un éventuel numéro de piste en tête de dernier segment
+      const last = parts[parts.length - 1].replace(/^\d{1,3}[\s._-]+/, '').trim();
+      const artist = parts[0];
+      const album = parts[1];
+      if (artist && album && last && !/^\d+$/.test(artist)) {
+        return { artist, album, title: last };
+      }
+    }
+    if (parts.length === 2) {
+      const [artist, title] = parts;
       if (artist && title && !/^\d+$/.test(artist)) return { artist, title };
     }
   }
@@ -87,6 +112,47 @@ export function derivedAlbum(track: { artist?: string; genre?: string }) {
 export function clamp01(v: number) {
   if (!Number.isFinite(v)) return 0;
   return Math.min(1, Math.max(0, v));
+}
+
+export type TrackSortKey = 'titre' | 'artiste' | 'album' | 'duree' | 'date';
+
+export const TRACK_SORTS: { key: TrackSortKey; label: string }[] = [
+  { key: 'titre', label: 'Titre' },
+  { key: 'artiste', label: 'Artiste' },
+  { key: 'album', label: 'Album' },
+  { key: 'duree', label: 'Durée' },
+  { key: 'date', label: 'Ajout' },
+];
+
+/** Tri « naturel » insensible aux accents et aux nombres (2 < 10). */
+const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
+
+export function sortTracks<T extends { title: string; artist: string; album: string; duration?: number; addedAt: number }>(
+  tracks: T[],
+  key: TrackSortKey
+): T[] {
+  const out = [...tracks];
+  out.sort((a, b) => {
+    switch (key) {
+      case 'artiste':
+        return collator.compare(a.artist, b.artist) || collator.compare(a.title, b.title);
+      case 'album':
+        return collator.compare(a.album, b.album) || collator.compare(a.title, b.title);
+      case 'duree':
+        return (a.duration ?? 0) - (b.duration ?? 0);
+      case 'date':
+        return b.addedAt - a.addedAt;
+      case 'titre':
+      default:
+        return collator.compare(a.title, b.title);
+    }
+  });
+  return out;
+}
+
+/** Nom de genre retenu pour un morceau, avec repli lisible. */
+export function genreName(track: { genre?: string }) {
+  return track.genre?.trim() || 'Sans genre';
 }
 
 export function hslToHex(h: number, sPercent: number, lPercent: number) {

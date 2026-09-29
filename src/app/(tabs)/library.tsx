@@ -14,10 +14,10 @@ import { useLibrary } from '@/context/library-context';
 import { usePlayer } from '@/context/player-context';
 import { useAppStyles } from '@/context/theme-context';
 import { artistSummary, searchTracks } from '@/lib/discover';
-import { hashHue, titleCount, trackInitials } from '@/lib/utils';
+import { genreName, hashHue, sortTracks, titleCount, trackInitials, TRACK_SORTS, type TrackSortKey } from '@/lib/utils';
 import type { Playlist, Track } from '@/lib/types';
 
-type Filter = 'tous' | 'playlists' | 'likes' | 'albums' | 'artistes';
+type Filter = 'tous' | 'playlists' | 'likes' | 'albums' | 'artistes' | 'genres';
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'tous', label: 'Tous' },
@@ -25,7 +25,10 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'likes', label: 'Titres likés' },
   { key: 'albums', label: 'Albums' },
   { key: 'artistes', label: 'Artistes' },
+  { key: 'genres', label: 'Genres' },
 ];
+
+const ALL_GENRES = '__all__';
 
 export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
@@ -34,12 +37,25 @@ export default function LibraryScreen() {
   const library = useLibrary();
   const player = usePlayer();
   const [filter, setFilter] = useState<Filter>('tous');
+  const [sortKey, setSortKey] = useState<TrackSortKey>('titre');
+  const [genre, setGenre] = useState<string>(ALL_GENRES);
   const [query, setQuery] = useState('');
   const [importing, setImporting] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [menuTrack, setMenuTrack] = useState<Track | null>(null);
 
   const q = query.trim();
+
+  const genres = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of library.tracks) {
+      const name = genreName(t);
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr'))
+      .map(([name, count]) => ({ name, count }));
+  }, [library.tracks]);
 
   const playlists = useMemo(
     () =>
@@ -57,7 +73,14 @@ export default function LibraryScreen() {
     [library.playlists, library.tracks, q]
   );
 
-  const filteredTracks = useMemo(() => searchTracks(library.tracks, q), [library.tracks, q]);
+  // Recherche → filtre genre → tri
+  const filteredTracks = useMemo(() => {
+    const searched = searchTracks(library.tracks, q);
+    const scoped = genre === ALL_GENRES ? searched : searched.filter((t) => genreName(t) === genre);
+    return sortTracks(scoped, sortKey);
+  }, [library.tracks, q, genre, sortKey]);
+
+  const scopedIds = useMemo(() => new Set(filteredTracks.map((t) => t.id)), [filteredTracks]);
 
   const albums = useMemo(() => {
     const map = new Map<string, Track[]>();
@@ -73,6 +96,19 @@ export default function LibraryScreen() {
   }, [filteredTracks]);
 
   const artists = useMemo(() => artistSummary(filteredTracks, 30), [filteredTracks]);
+
+  const genreGroups = useMemo(() => {
+    const map = new Map<string, Track[]>();
+    for (const t of filteredTracks) {
+      const name = genreName(t);
+      const list = map.get(name);
+      if (list) list.push(t);
+      else map.set(name, [t]);
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'fr'))
+      .map(([name, list]) => ({ name, tracks: list }));
+  }, [filteredTracks]);
 
   const playTracks = (ids: string[], startId?: string) => {
     if (!ids.length) return;
@@ -170,6 +206,21 @@ export default function LibraryScreen() {
         ))}
       </ScrollView>
 
+      {library.tracks.length && genres.length > 1 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+          <Pressable style={[styles.chipSmall, genre === ALL_GENRES && styles.chipActive]} onPress={() => setGenre(ALL_GENRES)}>
+            <Text style={[styles.chipSmallText, genre === ALL_GENRES && styles.chipActiveText]}>Tous les genres</Text>
+          </Pressable>
+          {genres.map((g) => (
+            <Pressable key={g.name} style={[styles.chipSmall, genre === g.name && styles.chipActive]} onPress={() => setGenre(g.name)}>
+              <Text style={[styles.chipSmallText, genre === g.name && styles.chipActiveText]}>
+                {g.name} · {g.count}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
+
       {filter === 'likes' && library.favoriteTracks.length ? (
         <Pressable
           style={styles.favsCard}
@@ -214,6 +265,22 @@ export default function LibraryScreen() {
         </View>
       ) : null}
 
+      {filteredTracks.length ? (
+        <View style={styles.sortRow}>
+          <MaterialIcons name="sort" size={16} color={colors.outline} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortScroll}>
+            {TRACK_SORTS.map((s) => (
+              <Pressable
+                key={s.key}
+                style={[styles.sortChip, sortKey === s.key && styles.sortChipActive]}
+                onPress={() => setSortKey(s.key)}>
+                <Text style={[styles.sortChipText, sortKey === s.key && styles.sortChipTextActive]}>{s.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
       {library.scanStatus ? (
         <View style={styles.scanRow}>
           <ActivityIndicator size="small" color={colors.primary} />
@@ -255,16 +322,24 @@ export default function LibraryScreen() {
     );
   }
 
-  const data: { key: string; type: 'playlist' | 'track' | 'album' | 'artist'; playlist?: Playlist; tracks: Track[]; name?: string }[] = [];
+  const data: {
+    key: string;
+    type: 'playlist' | 'track' | 'album' | 'artist' | 'genre';
+    playlist?: Playlist;
+    tracks: Track[];
+    name?: string;
+  }[] = [];
   if (filter === 'playlists') {
     for (const p of playlists) data.push({ key: p.playlist.id, type: 'playlist', playlist: p.playlist, tracks: p.tracks });
   } else if (filter === 'likes') {
-    for (const t of library.favoriteTracks.filter((t) => !q || filteredTracks.some((x) => x.id === t.id)))
+    for (const t of sortTracks(library.favoriteTracks.filter((t) => scopedIds.has(t.id)), sortKey))
       data.push({ key: t.id, type: 'track', tracks: [t] });
   } else if (filter === 'albums') {
     for (const a of albums) data.push({ key: `alb_${a.name}`, type: 'album', tracks: a.tracks, name: a.name });
   } else if (filter === 'artistes') {
     for (const a of artists) data.push({ key: `art_${a.artist}`, type: 'artist', tracks: a.tracks, name: a.artist });
+  } else if (filter === 'genres') {
+    for (const g of genreGroups) data.push({ key: `gen_${g.name}`, type: 'genre', tracks: g.tracks, name: g.name });
   } else {
     for (const t of filteredTracks) data.push({ key: t.id, type: 'track', tracks: [t] });
     for (const p of playlists) data.push({ key: `pl_${p.playlist.id}`, type: 'playlist', playlist: p.playlist, tracks: p.tracks });
@@ -351,18 +426,26 @@ export default function LibraryScreen() {
             );
           }
           const name = item.name!;
+          const isGenre = item.type === 'genre';
           return (
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-              onPress={() => playTracks(item.tracks.map((t) => t.id))}>
-              <Artwork hue={hashHue(name)} initials={trackInitials(name)} size={52} radiusValue={999} iconSize={20} />
+              onPress={() => playTracks(item.tracks.map((t) => t.id))}
+              onLongPress={isGenre ? () => { setGenre(name); setFilter('tous'); } : undefined}>
+              <Artwork hue={hashHue(name)} initials={trackInitials(name)} size={52} radiusValue={isGenre ? radius.md : 999} iconSize={20} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text numberOfLines={1} style={[typography.bodyLg, { color: colors.onSurface, fontFamily: fonts.bodySemi }]}>
                   {name}
                 </Text>
                 <Text style={styles.playlistSub}>{titleCount(item.tracks.length)}</Text>
               </View>
-              <MaterialIcons name="north-east" size={18} color={colors.onSurfaceVariant} />
+              {isGenre ? (
+                <Pressable hitSlop={8} onPress={() => { setGenre(name); setFilter('tous'); }}>
+                  <MaterialIcons name="filter-alt" size={18} color={colors.onSurfaceVariant} />
+                </Pressable>
+              ) : (
+                <MaterialIcons name="north-east" size={18} color={colors.onSurfaceVariant} />
+              )}
             </Pressable>
           );
         }}
@@ -420,6 +503,50 @@ const createStyles = () => StyleSheet.create({
     color: colors.onSurfaceVariant,
     fontSize: 12,
     fontFamily: fonts.body,
+  },
+  chipSmall: {
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceLow,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  chipSmallText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 11,
+    fontFamily: fonts.body,
+  },
+  chipActiveText: {
+    color: colors.onPrimary,
+    fontFamily: fonts.bodySemi,
+  },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  sortScroll: {
+    gap: spacing.xs,
+    alignItems: 'center',
+  },
+  sortChip: {
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceHigh,
+  },
+  sortChipActive: {
+    backgroundColor: colors.primaryContainer,
+  },
+  sortChipText: {
+    color: colors.onSurfaceVariant,
+    fontSize: 12,
+    fontFamily: fonts.body,
+  },
+  sortChipTextActive: {
+    color: colors.onPrimaryContainer,
+    fontFamily: fonts.bodySemi,
   },
   favsCard: {
     flexDirection: 'row',
