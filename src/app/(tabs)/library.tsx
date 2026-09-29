@@ -138,7 +138,13 @@ export default function LibraryScreen() {
     setScanning(true);
     try {
       const result = await library.importFromDevice();
-      if (result.denied) {
+      if (result.unavailable) {
+        Alert.alert(
+          'Analyse indisponible',
+          'Le scan des sons du téléphone nécessite un development build (Expo Go ne fournit pas ce module). Vous pouvez importer vos fichiers audio directement.',
+          [{ text: 'Importer des fichiers', onPress: handleImport }, { text: 'Annuler', style: 'cancel' }]
+        );
+      } else if (result.denied) {
         Alert.alert('Permission refusée', 'Autorisez l’accès audio pour analyser les sons de votre téléphone.');
       } else if (result.added > 0) {
         Alert.alert('Import terminé', `${result.found} fichier(s) audio trouvé(s), ${result.added} ajouté(s) à la bibliothèque.`);

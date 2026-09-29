@@ -4,13 +4,21 @@ import { Directory, File, Paths } from 'expo-file-system';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
-import { isMeaningfulAudio, persistScannedAudio, requestDeviceAudioPermission, scanDeviceAudio } from '@/lib/device-audio';
+import {
+  isDeviceScanAvailable,
+  isMeaningfulAudio,
+  persistScannedAudio,
+  requestDeviceAudioPermission,
+  scanDeviceAudio,
+} from '@/lib/device-audio';
 import { derivedAlbum, genId, hashHue, parseTrackName, sanitizeFileName } from '@/lib/utils';
 import { KEYS, loadJSON, loadRawJSON, saveJSON } from '@/lib/storage';
 import type { LibraryData, Playlist, Track } from '@/lib/types';
 
 export type DeviceImportResult = {
   denied: boolean;
+  /** Le module natif de scan est absent (Expo Go) : l'import de fichiers reste possible. */
+  unavailable: boolean;
   found: number;
   added: number;
 };
@@ -232,12 +240,15 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
   }, [state.tracks]);
 
   const importFromDevice = useCallback(async (): Promise<DeviceImportResult> => {
-    if (Platform.OS === 'web') return { denied: true, found: 0, added: 0 };
+    if (Platform.OS === 'web') return { denied: true, unavailable: true, found: 0, added: 0 };
+    if (!isDeviceScanAvailable()) {
+      return { denied: true, unavailable: true, found: 0, added: 0 };
+    }
     try {
       const granted = await requestDeviceAudioPermission();
-      if (!granted) return { denied: true, found: 0, added: 0 };
+      if (!granted) return { denied: true, unavailable: false, found: 0, added: 0 };
     } catch {
-      return { denied: true, found: 0, added: 0 };
+      return { denied: true, unavailable: false, found: 0, added: 0 };
     }
 
     const existing = new Set(
@@ -298,7 +309,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       setScanStatus(`Ajout de ${added}/${importable.length}…`);
     }
     setScanStatus(null);
-    return { denied: false, found: scanned.length, added };
+    return { denied: false, unavailable: false, found: scanned.length, added };
   }, [state.tracks]);
 
   const updateDuration = useCallback((id: string, duration: number) => {
